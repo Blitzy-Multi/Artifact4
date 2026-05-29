@@ -255,6 +255,15 @@ Expected result:
 13 passed, 1 skipped
 ```
 
+This count is authoritative for the current scaffold milestone, broken down as **3** tests in
+`tests/test_health.py` + **10** active tests in `tests/test_api.py` + **1** intentionally skipped
+placeholder in `tests/test_api.py` = **13 passed, 1 skipped**. Four of the ten active
+`tests/test_api.py` tests are deliberate regression guards (the three request-log-format tests and
+the no-`/static` test described above): three lock in the contracted request-log format and one
+asserts the baseline route map exposes no Flask default `/static` endpoint (the "no invented
+endpoints" rule). They are intentional and **must be retained**, so the expected total is
+**13 passed, 1 skipped** and must not be reduced by removing them.
+
 The active tests assert **parity** for the baseline contract — verifying HTTP status codes, response
 headers, and JSON bodies — so that any deviation from the established behavior is caught. The single
 skipped test is an intentional placeholder: once the original Node.js source is supplied, it is
