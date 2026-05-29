@@ -9,7 +9,12 @@ a clearly-marked placeholder for the routes that will be ported one-to-one once
 the original source is supplied. Do NOT assert behavior for endpoints the
 original does not expose (AAP 0.1.1, 0.6.2).
 """
+import logging
+
 import pytest
+from flask.logging import default_handler
+
+from app import LOG_FORMAT, create_app
 
 
 def test_testing_config_active(app):
@@ -55,6 +60,75 @@ def test_correlation_id_header_is_echoed(client):
     correlation_id = "test-correlation-id-123"
     response = client.get("/health", headers={"X-Request-ID": correlation_id})
     assert response.headers.get("X-Request-ID") == correlation_id
+
+
+# ---------------------------------------------------------------------------
+# Request-log format contract (regression guard for QA FS-2 Issue 1).
+#
+# Flask lazily attaches its own ``default_handler`` (bracketed format) to
+# ``app.logger`` the first time the attribute is read, which previously shadowed
+# the contracted format and left the custom formatter as dead code at runtime.
+# These tests lock in the contracted format
+# ("%(asctime)s %(levelname)s %(name)s: %(message)s") so the defect cannot recur.
+# ---------------------------------------------------------------------------
+def test_request_log_format_matches_contract(app):
+    """``app.logger`` carries a handler using the contracted LOG_FORMAT and
+    Flask's bracketed default handler has been removed."""
+    formats = [h.formatter._fmt for h in app.logger.handlers if h.formatter is not None]
+    # The contracted format must be the one actually installed on the logger.
+    assert LOG_FORMAT in formats, (
+        f"expected contracted format {LOG_FORMAT!r} on app.logger; got {formats!r}"
+    )
+    # Flask's default handler (and its bracketed format) must not be active.
+    assert default_handler not in app.logger.handlers
+    assert not any(
+        (fmt or "").startswith("[%(asctime)s]") for fmt in formats
+    ), f"Flask's bracketed default format must not be used; got {formats!r}"
+
+
+def test_request_log_renders_contracted_shape(app):
+    """A record formatted by the configured handler matches the contract: a
+    non-bracketed timestamp followed by the logger name token (e.g. ``app:``)."""
+    handler = next(
+        h
+        for h in app.logger.handlers
+        if h.formatter is not None and h.formatter._fmt == LOG_FORMAT
+    )
+    record = logging.LogRecord(
+        name="app",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="--> GET /health [abc]",
+        args=(),
+        exc_info=None,
+    )
+    rendered = handler.formatter.format(record)
+    # Contract: no leading bracket around the timestamp (Flask's default would
+    # render "[<ts>] INFO in <module>: ..."), and the logger name appears as
+    # "app:" rather than Flask's "in <module>:".
+    assert not rendered.startswith("[")
+    assert " INFO app: --> GET /health [abc]" in rendered
+    assert " in " not in rendered.split("app:")[0]
+
+
+def test_request_log_handler_is_idempotent():
+    """Repeated ``create_app`` calls do not accumulate duplicate contracted-format
+    handlers on the process-wide, name-shared ``app`` logger."""
+    first = create_app("testing")
+    first_count = sum(
+        1
+        for h in first.logger.handlers
+        if h.formatter is not None and h.formatter._fmt == LOG_FORMAT
+    )
+    second = create_app("testing")
+    second_count = sum(
+        1
+        for h in second.logger.handlers
+        if h.formatter is not None and h.formatter._fmt == LOG_FORMAT
+    )
+    assert first_count == 1
+    assert second_count == 1
 
 
 def test_no_static_route_in_baseline(app, client):

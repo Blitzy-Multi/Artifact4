@@ -28,6 +28,7 @@ Node.js source is not present in the repository (AAP §0.5.1, §0.6.2).
 import logging
 
 from flask import Flask
+from flask.logging import default_handler
 
 from app.config import get_config
 from app.extensions import register_extensions
@@ -36,26 +37,71 @@ from app.middleware import register_middleware
 from app.api import api_bp
 
 
+# Single source of truth for the contracted request-log line format (AAP §0.5.2).
+# Records emitted through ``app.logger`` (e.g. the request entry/exit lines in
+# app/middleware.py) are rendered as::
+#
+#     "2026-05-29 17:56:52,558 INFO app: --> GET /health [<request-id>]"
+#
+# This deliberately differs from Flask's built-in default
+# ("[%(asctime)s] %(levelname)s in %(module)s: %(message)s") so downstream log
+# aggregation can rely on a non-bracketed timestamp and the logger ``name``
+# token (here, "app"). Keeping it as a module-level constant makes the contract
+# the single point of change and lets tests assert against it directly.
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
+
+# Marker attribute set on the handler this module installs. ``app.logger`` is a
+# process-wide, name-shared logger ("app"); the application factory may run
+# multiple times in one process (notably the function-scoped ``app`` test
+# fixture calls ``create_app`` once per test). The marker lets
+# :func:`configure_logging` recognize its own handler and stay idempotent so
+# repeated calls never accumulate duplicate handlers (and therefore duplicate
+# log lines).
+_REQUEST_LOG_HANDLER_FLAG = "_artifact4_request_log_handler"
+
+
 def configure_logging(app):
-    """Attach a stream log handler to ``app.logger`` and set its level.
+    """Apply the contracted log format and level to ``app.logger``.
 
     The log level is resolved from the application's ``LOG_LEVEL`` config value
     (defaulting to ``"INFO"``). Unknown level names fall back to ``INFO`` via
-    :func:`getattr`, so an invalid configuration never raises.
+    :func:`getattr`, so an invalid configuration never raises. The level is
+    (re)applied unconditionally on every call so ``LOG_LEVEL`` is always honored.
 
-    The function is idempotent: a :class:`logging.StreamHandler` is only added
-    when ``app.logger`` has no handlers, so repeated invocations (or repeated
-    calls to :func:`create_app` within the same process) do not accumulate
-    duplicate handlers. The level is (re)applied on every call.
+    Flask attaches its module-level :data:`flask.logging.default_handler` to
+    ``app.logger`` lazily, the first time the ``app.logger`` attribute is read.
+    Because that handler carries Flask's *default* format
+    (``"[%(asctime)s] %(levelname)s in %(module)s: %(message)s"``), any naive
+    ``if not app.logger.handlers:`` guard sees a non-empty handler list (the act
+    of evaluating the guard triggers the lazy attach) and never installs a
+    custom handler — leaving the contracted format unapplied. To guarantee the
+    contracted :data:`LOG_FORMAT` actually takes effect, this function first
+    removes Flask's default handler, then installs its own
+    :class:`logging.StreamHandler`.
+
+    The function is idempotent: the installed handler is tagged with
+    :data:`_REQUEST_LOG_HANDLER_FLAG`, and a new handler is added only when no
+    tagged handler is already present. This matters because ``app.logger`` is a
+    process-wide, name-shared logger, so repeated invocations (e.g. the
+    function-scoped ``app`` test fixture calling :func:`create_app` per test) do
+    not accumulate duplicate handlers or duplicate log lines.
+    ``Logger.removeHandler`` is a safe no-op when the handler is absent.
 
     Args:
         app: The :class:`flask.Flask` application whose logger is configured.
     """
     level_name = str(app.config.get("LOG_LEVEL", "INFO")).upper()
     level = getattr(logging, level_name, logging.INFO)
-    if not app.logger.handlers:
+    # Drop Flask's lazily-attached default handler so its bracketed default
+    # format does not shadow the contracted LOG_FORMAT below. Safe no-op when
+    # the default handler was never attached (e.g. on a repeated call).
+    app.logger.removeHandler(default_handler)
+    # Install our contracted-format handler exactly once (idempotent across
+    # repeated create_app() calls in the same process).
+    if not any(getattr(h, _REQUEST_LOG_HANDLER_FLAG, False) for h in app.logger.handlers):
         handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+        handler.setFormatter(logging.Formatter(LOG_FORMAT))
+        setattr(handler, _REQUEST_LOG_HANDLER_FLAG, True)
         app.logger.addHandler(handler)
     app.logger.setLevel(level)
 
