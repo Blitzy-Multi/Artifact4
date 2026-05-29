@@ -20,6 +20,12 @@ Design notes
   variable (``development`` | ``production`` | ``testing``) is read and handed
   to the factory; when it is unset the factory falls back to its own default
   (``development``), so a missing value is always safe.
+* Environment variables are loaded from a local ``.env`` file (via
+  ``python-dotenv``) *before* the ``app`` package is imported. This is required
+  because configuration is read from ``os.environ`` at import time, so loading
+  ``.env`` afterwards would be too late for ``gunicorn wsgi:app`` and direct
+  WSGI imports. The call is idempotent and never overrides already-exported
+  values, so the ``flask run`` path (which loads ``.env`` itself) is unaffected.
 
 Environment variables
 ---------------------
@@ -33,7 +39,20 @@ PORT
 """
 import os
 
-from app import create_app
+from dotenv import load_dotenv
+
+# Load environment variables from a local ``.env`` file BEFORE importing the
+# application package. ``app.config`` (see ``app/config.py``) reads
+# ``os.environ`` at import/class-definition time, so the ``.env`` values must be
+# present in the environment first; otherwise ``gunicorn wsgi:app`` and direct
+# WSGI imports would silently ignore ``.env`` and fall back to development
+# defaults (e.g. ``dev-secret-change-me``). The Flask CLI already loads ``.env``
+# for ``flask run`` before importing this module, so this call is idempotent
+# there: by default ``load_dotenv`` does NOT override variables already set in
+# the environment, leaving the ``flask run`` path unaffected.
+load_dotenv()
+
+from app import create_app  # noqa: E402  (intentionally imported after load_dotenv)
 
 # Module-level WSGI application callable.
 #

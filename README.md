@@ -9,25 +9,28 @@ existing clients cannot distinguish this server from the original at the API bou
 
 The application is built to idiomatic Flask conventions: the **application-factory pattern**
 (`create_app()`), **Blueprints** for route grouping, a dedicated configuration module, centralized
-JSON error handlers, request hooks for middleware parity, and a WSGI entrypoint for production. This
-checkpoint delivers the cross-cutting pieces that need no application source — the centralized JSON
-error handlers (`app/errors.py`), the request hooks (`app/middleware.py`), and the extension-wiring
-seam (`app/extensions.py`). The application factory, configuration module, API Blueprint, and WSGI
-entrypoint are **planned for a later milestone** (see the source-of-truth note below).
+JSON error handlers, request hooks for middleware parity, and a WSGI entrypoint for production. The
+server is **fully assembled and runnable**: the application factory (`app/__init__.py`), the
+environment-driven configuration module (`app/config.py`), the API Blueprint (`app/api/`) exposing
+`GET /health`, the centralized JSON error handlers (`app/errors.py`), the request hooks
+(`app/middleware.py`), the extension-wiring seam (`app/extensions.py`), and the WSGI entrypoint
+(`wsgi.py`) are all present and wired together. Only the parity **test suite** is deferred to the
+final milestone (see the source-of-truth note below).
 
 > **Source-of-truth note**
 >
 > Functional parity is defined relative to the original Node.js implementation, which is **not yet
-> present in this repository**. The port is delivered in milestones. **This checkpoint (project
-> foundations)** establishes the project's configuration and the cross-cutting Flask building blocks
-> only: the dependency manifests, environment templates, and tooling, plus the request/response
-> middleware (`app/middleware.py`), the centralized JSON error handlers (`app/errors.py`), and the
-> extension-wiring seam (`app/extensions.py`). The **application factory, configuration module, API
-> Blueprint, health endpoint, WSGI entrypoint, and test suite are planned for a later milestone and
-> are not present yet** — the sections below that describe them are explicitly marked *planned*. The
-> exact application-specific endpoints, models, services, validation schemas, and authentication are
-> then ported **one-to-one** from the original routes once that source is provided. No business
-> endpoints are invented here.
+> present in this repository**. The port is delivered in milestones. **This checkpoint delivers a
+> runnable Flask application**: the application factory (`app/__init__.py`), the configuration module
+> (`app/config.py`), the API Blueprint (`app/api/`) with the `GET /health` endpoint, the WSGI
+> entrypoint (`wsgi.py`), the request/response middleware (`app/middleware.py`), the centralized JSON
+> error handlers (`app/errors.py`), and the extension-wiring seam (`app/extensions.py`) are all
+> present and wired together, alongside the dependency manifests, environment templates, and tooling.
+> **Only the parity test suite — `tests/conftest.py`, `tests/test_health.py`, and `tests/test_api.py`
+> — is deferred to the final milestone** (the `tests/` package itself already exists). The exact
+> application-specific endpoints, models, services, validation schemas, and authentication are then
+> ported **one-to-one** from the original routes once that source is provided. No business endpoints
+> are invented here.
 
 ## Prerequisites
 
@@ -73,14 +76,16 @@ All commands are run from the repository root.
    cp .env.example .env
    ```
 
-   The `.env` file is git‑ignored and is loaded automatically at startup by `python-dotenv`. Never
+   The `.env` file is git‑ignored and is loaded automatically at startup by `python-dotenv`: the
+   WSGI entrypoint (`wsgi.py`) calls `load_dotenv()` before the application is imported, so
+   `gunicorn wsgi:app`, `python wsgi.py`, and `flask run` all pick up your `.env` values. Never
    commit real secrets — populate `.env` locally (see [Configuration](#configuration)).
 
 ## Running the Server
 
-> **Planned — not available yet.** Running the server requires the WSGI entrypoint (`wsgi.py`) and
-> the application factory, which are added in a later milestone. The commands in this section
-> document the **target** run workflow and will work once those files exist.
+The server is **runnable now**. The WSGI entrypoint (`wsgi.py`) exposes `app = create_app(...)`, and
+the application factory wires configuration, logging, the API Blueprint, error handlers, and request
+hooks. Use the development or production workflow below.
 
 ### Development
 
@@ -124,11 +129,11 @@ The `PORT` variable therefore controls the production listen port; in developmen
 ## Configuration
 
 Configuration is supplied entirely through **environment variables**, loaded from a local `.env`
-file by `python-dotenv`. The environment template (`.env.example`) that enumerates these variables is
-present now. Consuming them through configuration classes (**Base / Development / Production /
-Testing**) selected by `APP_CONFIG` is *planned*: those classes live in `app/config.py`, which is
-added in a later milestone. **Secrets are never hard-coded** — they live only in your git-ignored
-`.env`.
+file by `python-dotenv` (the WSGI entrypoint calls `load_dotenv()` at startup). The environment
+template (`.env.example`) enumerates these variables. They are consumed through configuration classes
+(**Base / Development / Production / Testing**) defined in `app/config.py` and selected by
+`APP_CONFIG`; an unknown `APP_CONFIG` value falls back safely to the development configuration.
+**Secrets are never hard-coded** — they live only in your git-ignored `.env`.
 
 The table below mirrors `.env.example` exactly. Copy that template to `.env` and replace the
 placeholders with values for your environment.
@@ -156,8 +161,8 @@ python -c "import secrets; print(secrets.token_hex(32))"
 
 ## API Endpoints
 
-The API Blueprint is *planned* for a later milestone. Once it is added, the scaffold will always
-expose a health endpoint:
+The API Blueprint is registered at the application root (no `/api` prefix). The scaffold always
+exposes a health endpoint:
 
 | Method | Path      | Description                          | Success Status | Response Body        |
 | ------ | --------- | ------------------------------------ | -------------- | -------------------- |
@@ -202,18 +207,21 @@ after the tree.
 └── README.md                # This file
 ```
 
-> **What exists now vs. planned.** Present at this checkpoint: the configuration, dependency, and
-> tooling files at the repository root, plus `app/errors.py`, `app/extensions.py`, and
-> `app/middleware.py`. *Planned for a later milestone:* `app/__init__.py` (the application factory),
-> `app/config.py`, the `app/api/` Blueprint package, `wsgi.py`, and the `tests/` suite. Conditional
+> **What exists now vs. planned.** Present and runnable at this checkpoint: the application factory
+> (`app/__init__.py`), the configuration module (`app/config.py`), the `app/api/` Blueprint package
+> (`__init__.py` + `routes.py` with `GET /health`), the WSGI entrypoint (`wsgi.py`), `app/errors.py`,
+> `app/extensions.py`, and `app/middleware.py`, alongside the configuration, dependency, and tooling
+> files at the repository root. The `tests/` package exists; *planned for the final milestone* are
+> its parity modules `tests/conftest.py`, `tests/test_health.py`, and `tests/test_api.py`. Conditional
 > layers — `app/models/`, `app/services/`, `app/schemas/`, `app/auth.py`, `migrations/`,
 > `app/templates/`, and `app/static/` — are added only if the original source exercises the
 > corresponding capability.
 
 ## Testing
 
-> **Planned — not available yet.** The `tests/` suite is added in a later milestone, so there are no
-> tests to run at this checkpoint.
+> **Planned — final milestone.** The `tests/` package exists, but its parity modules
+> (`tests/conftest.py`, `tests/test_health.py`, `tests/test_api.py`) are added in the final
+> milestone, so there are no tests to run yet.
 
 The parity test suite will use **[pytest](https://docs.pytest.org/)** (the replacement for the
 original project's `jest` / `mocha`). `pytest` is already pinned in `requirements-dev.txt`, and

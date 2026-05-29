@@ -15,6 +15,11 @@ class Config:
     TESTING = False
     PORT = int(os.getenv("PORT", "5000"))
     LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+    # Desired JSON key ordering for response parity. NOTE: in Flask 3.x the
+    # standalone ``JSON_SORT_KEYS`` config key is inert; create_app() applies
+    # this value to the active JSON provider via ``app.json.sort_keys`` so the
+    # unsorted-key behavior is actually honored. Kept here as the single source
+    # of truth for the setting.
     JSON_SORT_KEYS = False
 
 

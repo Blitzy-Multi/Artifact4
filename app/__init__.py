@@ -71,6 +71,9 @@ def create_app(config=None):
     Registration order (do not reorder)::
 
         1. config         -> app.config.from_object(get_config(config))
+                             then mirror JSON_SORT_KEYS onto app.json.sort_keys
+                             (Flask 3 JSON-provider API; the config key alone is
+                             inert in Flask 3.x)
         2. logging         -> configure_logging(app)
         3. extensions      -> register_extensions(app)
         4. blueprint       -> app.register_blueprint(api_bp)  (no url_prefix)
@@ -91,6 +94,12 @@ def create_app(config=None):
     """
     app = Flask(__name__)
     app.config.from_object(get_config(config))
+    # Flask 3 removed the ``JSON_SORT_KEYS`` *config* key; key-sorting behavior
+    # now lives on the JSON provider (``app.json``). Mirror the loaded config
+    # value onto the provider so the intended unsorted-key output (response
+    # byte-parity with the original server) is actually applied. Falls back to
+    # ``False`` if a config object omits the key.
+    app.json.sort_keys = app.config.get("JSON_SORT_KEYS", False)
     configure_logging(app)
     register_extensions(app)
     app.register_blueprint(api_bp)
