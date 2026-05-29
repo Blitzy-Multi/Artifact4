@@ -6,6 +6,37 @@ NEVER hard-coded beyond a development placeholder.
 """
 import os
 
+# Recognized string spellings for boolean environment variables. Parsing is
+# case-insensitive and tolerant of surrounding whitespace.
+_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+_FALSE_VALUES = frozenset({"0", "false", "no", "off"})
+
+
+def parse_bool(value, default=None):
+    """Parse a boolean from an environment-variable string.
+
+    Accepts the common truthy/falsey spellings (case-insensitive,
+    whitespace-tolerant): ``1/true/yes/on`` -> ``True`` and
+    ``0/false/no/off`` -> ``False``.
+
+    Args:
+        value: The raw string (typically from :func:`os.getenv`) or ``None``.
+        default: Value returned when ``value`` is ``None`` or unrecognized.
+
+    Returns:
+        The parsed boolean, or ``default`` when the input is absent or not a
+        recognized boolean spelling. This lets callers distinguish "no override
+        supplied" (``default=None``) from an explicit ``True``/``False``.
+    """
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in _TRUE_VALUES:
+        return True
+    if normalized in _FALSE_VALUES:
+        return False
+    return default
+
 
 class Config:
     """Base configuration shared by all environments."""
@@ -21,6 +52,14 @@ class Config:
     # unsorted-key behavior is actually honored. Kept here as the single source
     # of truth for the setting.
     JSON_SORT_KEYS = False
+    # Force compact JSON serialization in EVERY environment. Flask's default
+    # JSON provider leaves ``compact`` unset (``None``), which makes it
+    # pretty-print (indent=2) whenever ``app.debug`` is true and emit compact
+    # output otherwise -- so the same endpoint would serialize differently in a
+    # debug dev server versus production. Pinning this to ``True`` guarantees a
+    # byte-identical response body across dev and prod (AAP §0.7 rule R6,
+    # runtime dev/prod parity). create_app() applies it via ``app.json.compact``.
+    JSON_COMPACT = True
 
 
 class DevelopmentConfig(Config):

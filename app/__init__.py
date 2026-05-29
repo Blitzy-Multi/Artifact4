@@ -26,11 +26,12 @@ JWT, outbound HTTP, etc.) are intentionally absent because the original
 Node.js source is not present in the repository (AAP §0.5.1, §0.6.2).
 """
 import logging
+import os
 
 from flask import Flask
 from flask.logging import default_handler
 
-from app.config import get_config
+from app.config import get_config, parse_bool
 from app.extensions import register_extensions
 from app.errors import register_error_handlers
 from app.middleware import register_middleware
@@ -117,9 +118,10 @@ def create_app(config=None):
     Registration order (do not reorder)::
 
         1. config         -> app.config.from_object(get_config(config))
-                             then mirror JSON_SORT_KEYS onto app.json.sort_keys
-                             (Flask 3 JSON-provider API; the config key alone is
-                             inert in Flask 3.x)
+                             then apply the optional ``DEBUG`` env override and
+                             mirror JSON_SORT_KEYS / JSON_COMPACT onto the JSON
+                             provider (Flask 3 JSON-provider API; those config
+                             keys alone are inert in Flask 3.x)
         2. logging         -> configure_logging(app)
         3. extensions      -> register_extensions(app)
         4. blueprint       -> app.register_blueprint(api_bp)  (no url_prefix)
@@ -153,12 +155,29 @@ def create_app(config=None):
     # original source proves it is part of the contract.
     app = Flask(__name__, static_folder=None)
     app.config.from_object(get_config(config))
+    # Apply the optional ``DEBUG`` environment override AFTER class selection so
+    # an explicit ``DEBUG`` env var wins over the selected config class's
+    # hard-coded value (FS-6 config checklist: SECRET_KEY/PORT/DEBUG/LOG_LEVEL
+    # must all be env-overridable). ``parse_bool`` returns ``None`` when the var
+    # is absent or unrecognized, in which case the class value is preserved.
+    # NOTE: this reads ``DEBUG`` (not Flask's ``FLASK_DEBUG``, which the Flask
+    # CLI applies to the dev server only, after the factory has returned), so
+    # ``create_app()`` alone never reflects ``FLASK_DEBUG``.
+    debug_override = parse_bool(os.getenv("DEBUG"))
+    if debug_override is not None:
+        app.config["DEBUG"] = debug_override
     # Flask 3 removed the ``JSON_SORT_KEYS`` *config* key; key-sorting behavior
     # now lives on the JSON provider (``app.json``). Mirror the loaded config
     # value onto the provider so the intended unsorted-key output (response
     # byte-parity with the original server) is actually applied. Falls back to
     # ``False`` if a config object omits the key.
     app.json.sort_keys = app.config.get("JSON_SORT_KEYS", False)
+    # Force deterministic, compact JSON serialization regardless of debug mode.
+    # Flask's provider pretty-prints when ``compact`` is left unset (``None``)
+    # and ``app.debug`` is true, which would make ``/health`` (and every JSON
+    # response) differ byte-for-byte between a debug dev server and production.
+    # Pinning ``compact`` guarantees dev/prod response-body parity (AAP rule R6).
+    app.json.compact = app.config.get("JSON_COMPACT", True)
     configure_logging(app)
     register_extensions(app)
     app.register_blueprint(api_bp)

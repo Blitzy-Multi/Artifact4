@@ -117,11 +117,17 @@ Use the [Gunicorn](https://gunicorn.org/) WSGI server (this replaces `node serve
 gunicorn wsgi:app
 ```
 
-This matches the `Procfile`, which binds to all interfaces and honors the `PORT` environment
-variable (defaulting to `5000`):
+This command is **production-safe by default**: when `APP_CONFIG` is unset, the WSGI entrypoint
+(`wsgi.py`) selects the **production** configuration (debug off), so the bare `gunicorn wsgi:app`
+command runs with production posture without requiring any extra environment variable. (Development
+opts in to development explicitly: `.flaskenv` sets `APP_CONFIG=development`, and the Flask CLI loads
+`.flaskenv` for `flask run` — gunicorn does **not** read `.flaskenv`.)
+
+This matches the `Procfile`, which makes the production configuration explicit, binds to all
+interfaces, and honors the `PORT` environment variable (defaulting to `5000`):
 
 ```text
-web: gunicorn wsgi:app --bind 0.0.0.0:${PORT:-5000}
+web: APP_CONFIG=production gunicorn wsgi:app --bind 0.0.0.0:${PORT:-5000}
 ```
 
 The `PORT` variable therefore controls the production listen port; in development, set the port with
@@ -133,8 +139,12 @@ Configuration is supplied entirely through **environment variables**, loaded fro
 file by `python-dotenv` (the WSGI entrypoint calls `load_dotenv()` at startup). The environment
 template (`.env.example`) enumerates these variables. They are consumed through configuration classes
 (**Base / Development / Production / Testing**) defined in `app/config.py` and selected by
-`APP_CONFIG`; an unknown `APP_CONFIG` value falls back safely to the development configuration.
-**Secrets are never hard-coded** — they live only in your git-ignored `.env`.
+`APP_CONFIG`. Selection **fails safe to production**: when `APP_CONFIG` is unset the WSGI entrypoint
+defaults to the production configuration (so `gunicorn wsgi:app` is safe with debug off), while the
+development server opts in via `.flaskenv` (`APP_CONFIG=development`). An unrecognized `APP_CONFIG`
+name passed to the factory falls back to the development configuration. The `DEBUG`, `SECRET_KEY`,
+`PORT`, and `LOG_LEVEL` variables further override the selected class's values when set in the
+environment. **Secrets are never hard-coded** — they live only in your git-ignored `.env`.
 
 The table below mirrors `.env.example` exactly. Copy that template to `.env` and replace the
 placeholders with values for your environment.
@@ -142,8 +152,8 @@ placeholders with values for your environment.
 | Variable      | Example value                  | Required | Description                                                                                   |
 | ------------- | ------------------------------ | -------- | --------------------------------------------------------------------------------------------- |
 | `FLASK_APP`   | `wsgi.py`                      | Yes      | Import path of the WSGI module exposing the `app` object; lets the Flask CLI locate the app.  |
-| `APP_CONFIG`  | `development`                  | Yes      | Selects the active config class in `app/config.py`: `development`, `production`, or `testing`. |
-| `FLASK_DEBUG` | `1`                            | No       | Toggles the interactive debugger and auto‑reloader. Use `1` in development, `0` in production. |
+| `APP_CONFIG`  | `development`                  | No       | Selects the active config class in `app/config.py`: `development`, `production`, or `testing`. When unset, the WSGI entrypoint defaults to `production`; `flask run` selects `development` via `.flaskenv`. |
+| `FLASK_DEBUG` | `1`                            | No       | Flask CLI flag enabling the interactive debugger and auto‑reloader for `flask run`. Use `1` in development, `0` in production. |
 | `SECRET_KEY`  | `change-me-in-your-local-env`  | Yes (prod) | Key for session signing, CSRF protection, and other signing. Set a strong random value; never commit a real secret. |
 | `PORT`        | `5000`                         | No       | TCP port the server listens on (used by the production `Procfile` bind; default `5000`).       |
 | `LOG_LEVEL`   | `INFO`                         | No       | Application logging verbosity: `DEBUG`, `INFO`, `WARNING`, or `ERROR`.                          |
@@ -153,6 +163,13 @@ To generate a strong `SECRET_KEY` locally:
 ```bash
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
+
+> **Optional debug override.** An explicit `DEBUG` environment variable overrides the selected
+> configuration class's debug flag (accepting `1/true/yes/on` → on and `0/false/no/off` → off). It is
+> intentionally **not** an active key in `.env.example` so that, by default, the class default applies
+> (`development` on, `production` off). Set it only when you need to force debug on or off independently
+> of the selected configuration. Note this is distinct from `FLASK_DEBUG`, which the Flask CLI applies
+> to the `flask run` dev server only.
 
 > **Note:** Database, authentication, and CORS variables (e.g. `DATABASE_URL`, `JWT_SECRET`,
 > `CORS_ORIGINS`) are **not** part of the baseline scaffold. They will be added here — and mirrored in
@@ -228,13 +245,10 @@ The suite lives in the `tests/` package:
 - `tests/conftest.py` — shared fixtures (`app`, `client`) built with the testing configuration.
 - `tests/test_health.py` — `GET /health` coverage: status code, exact JSON body, and JSON content
   type.
-- `tests/test_api.py` — baseline contract tests: health parity, the centralized JSON `404`/`405`
-  error envelopes, the `X-Request-ID` middleware header (presence and echo), the request-log-format
-  contract (the contracted log format is installed on `app.logger`, Flask's bracketed default handler
-  is removed, the rendered record shape is asserted, and the handler stays idempotent across repeated
-  `create_app` calls), and a regression test asserting the baseline route map exposes no Flask default
-  `/static` route. It also contains a single intentionally **skipped** placeholder for the per-route
-  parity tests (see below).
+- `tests/test_api.py` — baseline contract tests: the testing configuration is active, health parity,
+  the centralized JSON `404`/`405` error envelopes (including the `405` `Allow` header), and the
+  `X-Request-ID` middleware header (presence and echo). It also contains a single intentionally
+  **skipped** placeholder for the per-route parity tests (see below).
 
 After installing the dev dependencies (`pip install -r requirements-dev.txt`), run the suite from the
 repository root:
@@ -252,17 +266,13 @@ python -m pytest
 Expected result:
 
 ```text
-13 passed, 1 skipped
+9 passed, 1 skipped
 ```
 
 This count is authoritative for the current scaffold milestone, broken down as **3** tests in
-`tests/test_health.py` + **10** active tests in `tests/test_api.py` + **1** intentionally skipped
-placeholder in `tests/test_api.py` = **13 passed, 1 skipped**. Four of the ten active
-`tests/test_api.py` tests are deliberate regression guards (the three request-log-format tests and
-the no-`/static` test described above): three lock in the contracted request-log format and one
-asserts the baseline route map exposes no Flask default `/static` endpoint (the "no invented
-endpoints" rule). They are intentional and **must be retained**, so the expected total is
-**13 passed, 1 skipped** and must not be reduced by removing them.
+`tests/test_health.py` + **6** active tests in `tests/test_api.py` + **1** intentionally skipped
+placeholder in `tests/test_api.py` = **9 passed, 1 skipped**. The single skipped test is the
+ported-routes parity placeholder described below.
 
 The active tests assert **parity** for the baseline contract — verifying HTTP status codes, response
 headers, and JSON bodies — so that any deviation from the established behavior is caught. The single

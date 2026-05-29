@@ -16,10 +16,15 @@ Design notes
   business logic; all of that lives inside the ``app`` package and is assembled
   by :func:`app.create_app`. Keeping the entrypoint minimal is the idiomatic
   Flask application-factory pattern and keeps the ``wsgi:app`` contract stable.
-* Configuration selection is environment-driven. The ``APP_CONFIG`` environment
-  variable (``development`` | ``production`` | ``testing``) is read and handed
-  to the factory; when it is unset the factory falls back to its own default
-  (``development``), so a missing value is always safe.
+* Configuration selection is environment-driven and **fails safe to
+  production**. The ``APP_CONFIG`` environment variable
+  (``development`` | ``production`` | ``testing``) is read here and handed to
+  the factory; when it is unset this entrypoint defaults it to ``production``
+  so the bare production command ``gunicorn wsgi:app`` is safe (debug off) with
+  no extra environment plumbing. The development server opts IN to development:
+  ``.flaskenv`` sets ``APP_CONFIG=development`` and is loaded by the Flask CLI
+  for ``flask run`` (gunicorn does NOT read ``.flaskenv``), so ``flask run``
+  selects development while ``gunicorn wsgi:app`` stays production by default.
 * Environment variables are loaded from a local ``.env`` file (via
   ``python-dotenv``) *before* the ``app`` package is imported. This is required
   because configuration is read from ``os.environ`` at import time, so loading
@@ -31,7 +36,9 @@ Environment variables
 ---------------------
 APP_CONFIG
     Selects the configuration profile passed to :func:`app.create_app`.
-    Optional; the factory defaults to ``development`` when it is absent.
+    Optional; this entrypoint defaults it to ``production`` when it is absent so
+    the bare ``gunicorn wsgi:app`` command is production-safe. ``flask run``
+    selects ``development`` explicitly via ``.flaskenv``.
 PORT
     TCP port used only by the ``__main__`` development runner below. Defaults
     to ``5000``. Production servers (gunicorn) bind the port themselves (see
@@ -57,18 +64,25 @@ from app import create_app  # noqa: E402  (intentionally imported after load_dot
 # Module-level WSGI application callable.
 #
 # ``wsgi:app`` is the import string used by gunicorn (``Procfile``) and the
-# Flask CLI (``.flaskenv`` -> ``FLASK_APP=wsgi.py``). The factory resolves
-# ``APP_CONFIG`` to a concrete configuration object; passing ``None`` (when the
-# variable is unset) is explicitly supported by the factory and yields the
-# default development configuration.
-app = create_app(os.getenv("APP_CONFIG"))
+# Flask CLI (``.flaskenv`` -> ``FLASK_APP=wsgi.py``). Configuration selection
+# fails safe to PRODUCTION: when ``APP_CONFIG`` is unset, the bare
+# ``gunicorn wsgi:app`` command must run with production posture (debug off)
+# without requiring an unstated environment variable. Development is opt-in via
+# ``.flaskenv`` (``APP_CONFIG=development``), which the Flask CLI loads for
+# ``flask run`` but gunicorn does not, so ``flask run`` selects development
+# while ``gunicorn wsgi:app`` defaults to production.
+app = create_app(os.getenv("APP_CONFIG", "production"))
 
 
 if __name__ == "__main__":
-    # Direct execution (``python wsgi.py``) starts Flask's built-in development
-    # server. This path is for local development only -- production deployments
-    # use gunicorn (see ``Procfile``), which imports ``app`` above and never
-    # runs this block. Binding ``0.0.0.0`` exposes the server on all interfaces
-    # so it is reachable from outside a container; the port is read from
-    # ``PORT`` and defaults to ``5000`` to mirror the documented configuration.
+    # Direct execution (``python wsgi.py``) starts Flask's built-in WSGI server
+    # using the ``app`` built above. Because this path does NOT load
+    # ``.flaskenv``, it inherits the same production-safe default as gunicorn
+    # (``APP_CONFIG`` -> ``production`` when unset); export ``APP_CONFIG`` (or
+    # use the development workflow ``flask run``, which loads ``.flaskenv``) to
+    # select another profile. Production deployments use gunicorn (see
+    # ``Procfile``), which imports ``app`` above and never runs this block.
+    # Binding ``0.0.0.0`` exposes the server on all interfaces so it is
+    # reachable from outside a container; the port is read from ``PORT`` and
+    # defaults to ``5000`` to mirror the documented configuration.
     app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
