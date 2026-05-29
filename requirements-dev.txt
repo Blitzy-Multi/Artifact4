@@ -1,0 +1,5 @@
+# Development / test dependencies for the Artifact4 Flask server.
+# Includes runtime deps so a single environment can run and test the app.
+-r requirements.txt
+
+pytest==9.0.3

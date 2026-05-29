@@ -1,0 +1,10 @@
+# Tooling configuration for the Artifact4 Flask server.
+# Scoped to test/lint tooling only (no build-system/packaging metadata) per AAP §0.5.1.
+
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-ra -q"
