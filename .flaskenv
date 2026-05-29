@@ -12,7 +12,7 @@ FLASK_APP=wsgi.py
 # Target environment for local development runs. Note: Flask 2.3+/3.x no longer
 # derives debug mode from FLASK_ENV (FLASK_DEBUG does); it is retained here to
 # explicitly signal the development environment for tooling and any code that
-# inspects it. The active configuration class is selected via FLASK_CONFIG in
+# inspects it. The active configuration class is selected via APP_CONFIG in
 # ".env" (see .env.example).
 FLASK_ENV=development
 
