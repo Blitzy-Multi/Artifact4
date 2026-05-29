@@ -1,43 +1,31 @@
-# Byte-compiled / optimized / DLL files
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-
 # Virtual environments
 .venv/
 venv/
 env/
-ENV/
 
-# Environment files / secrets (never commit real .env)
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment / secrets
+# Ignore ONLY the real .env (never commit secrets).
+# .env.example and .flaskenv are intentionally tracked templates and must NOT be ignored.
 .env
-.env.*
-!.env.example
 
-# Distribution / packaging
+# Test / coverage artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Packaging / build
 build/
 dist/
 *.egg-info/
 .eggs/
-wheels/
-*.egg
 
-# Test & coverage artifacts
-.pytest_cache/
-.coverage
-.coverage.*
-htmlcov/
-.tox/
-nosetests.xml
-coverage.xml
-
-# Logs
-*.log
-
-# IDE / editor / OS
+# IDE / OS
 .idea/
 .vscode/
-*.swp
-*.swo
 .DS_Store
