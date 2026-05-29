@@ -1,7 +1,17 @@
-# Runtime dependencies for the Artifact4 Flask server.
-# Versions pinned per Technical Specification / Agent Action Plan (AAP) §0.3.1.
-# Python 3.13 runtime (AAP recommended 3.12.x; 3.13 used as it is the host
-# toolchain and is fully supported by Flask 3.1.x).
+# Baseline runtime dependencies for the Artifact4 Flask server.
+# This file is the Python equivalent of the original project's package.json
+# "dependencies". Versions are EXACT-pinned per the Technical Specification /
+# Agent Action Plan (AAP) §0.3.1 and verified against PyPI (2026-05-29);
+# no ranges, "latest", or placeholder versions are used.
+#
+# Only the BASELINE Flask runtime stack is declared here. The original Node.js
+# source is absent, so its dependencies cannot yet be translated. Upon source
+# reconciliation, add the corresponding Python packages (e.g. flask-cors,
+# requests, Flask-SQLAlchemy, pymongo, PyJWT, bcrypt/passlib, marshmallow)
+# at pinned versions per the Node.js -> Python mapping in AAP §0.3.2.
+#
+# Runtime: Python 3.13 (AAP recommended 3.12.x; 3.13 is the host toolchain and
+# is fully supported by Flask 3.1.x).
 
 Flask==3.1.3
 python-dotenv==1.2.2
