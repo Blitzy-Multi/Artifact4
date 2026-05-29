@@ -57,6 +57,35 @@ def test_correlation_id_header_is_echoed(client):
     assert response.headers.get("X-Request-ID") == correlation_id
 
 
+def test_no_static_route_in_baseline(app, client):
+    """The baseline must not expose Flask's default ``/static`` route.
+
+    The application factory disables Flask's built-in static endpoint via
+    ``static_folder=None`` because serving static assets is out of scope for the
+    baseline; the default ``/static/<path:filename>`` route would be an invented
+    endpoint relative to the (absent) original Node.js server (AAP 0.6.2; rule
+    R3, "no invented endpoints"). This test guards against a regression that
+    re-enables that route.
+    """
+    # Structural check: the URL map exposes no /static path and no 'static'
+    # endpoint.
+    paths = {rule.rule for rule in app.url_map.iter_rules()}
+    endpoints = {rule.endpoint for rule in app.url_map.iter_rules()}
+    assert not any(path.startswith("/static") for path in paths), (
+        f"baseline must not expose a /static route; url_map paths={sorted(paths)}"
+    )
+    assert "static" not in endpoints, (
+        "baseline must not register the default 'static' endpoint; "
+        f"url_map endpoints={sorted(endpoints)}"
+    )
+    # Behavioral check: a request under /static falls through to the centralized
+    # JSON 404 handler rather than being served (200) or rejected (405) by a
+    # static route.
+    response = client.get("/static/anything.txt")
+    assert response.status_code == 404
+    assert response.is_json
+
+
 # ---------------------------------------------------------------------------
 # Placeholder for ported-route parity tests.
 #

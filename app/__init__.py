@@ -83,6 +83,13 @@ def create_app(config=None):
     The blueprint is registered with **no** ``url_prefix`` so that ``/health``
     and every ported route live at the application root.
 
+    Flask's built-in static route is **disabled** (``static_folder=None``) so
+    the baseline runtime route map exposes only the registered blueprint views
+    (e.g. ``/health``) and never ``/static/<path:filename>``. Serving static
+    assets is out of scope for the baseline and is only added once the original
+    Node.js source proves it is part of the contract (AAP §0.6.2; rule R3, "no
+    invented endpoints").
+
     Args:
         config: Selects the configuration to load. May be a config name
             string (e.g. ``"testing"``), a config class/object, or ``None``.
@@ -92,7 +99,13 @@ def create_app(config=None):
     Returns:
         flask.Flask: The configured application instance, ready to serve.
     """
-    app = Flask(__name__)
+    # Disable Flask's default static route (``static_folder=None``). The
+    # baseline scaffold must expose ONLY the routes it explicitly registers; the
+    # default ``/static/<path:filename>`` route is an invented endpoint relative
+    # to the (absent) original Node.js server and is therefore out of scope
+    # (AAP §0.6.2; rule R3). Static-file serving is reintroduced only if the
+    # original source proves it is part of the contract.
+    app = Flask(__name__, static_folder=None)
     app.config.from_object(get_config(config))
     # Flask 3 removed the ``JSON_SORT_KEYS`` *config* key; key-sorting behavior
     # now lives on the JSON provider (``app.json``). Mirror the loaded config

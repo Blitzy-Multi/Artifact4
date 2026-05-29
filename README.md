@@ -14,8 +14,8 @@ server is **fully assembled and runnable**: the application factory (`app/__init
 environment-driven configuration module (`app/config.py`), the API Blueprint (`app/api/`) exposing
 `GET /health`, the centralized JSON error handlers (`app/errors.py`), the request hooks
 (`app/middleware.py`), the extension-wiring seam (`app/extensions.py`), and the WSGI entrypoint
-(`wsgi.py`) are all present and wired together. Only the parity **test suite** is deferred to the
-final milestone (see the source-of-truth note below).
+(`wsgi.py`) are all present and wired together. The baseline parity **test suite** (`tests/`) is also
+present and passing (see [Testing](#testing) and the source-of-truth note below).
 
 > **Source-of-truth note**
 >
@@ -26,11 +26,12 @@ final milestone (see the source-of-truth note below).
 > entrypoint (`wsgi.py`), the request/response middleware (`app/middleware.py`), the centralized JSON
 > error handlers (`app/errors.py`), and the extension-wiring seam (`app/extensions.py`) are all
 > present and wired together, alongside the dependency manifests, environment templates, and tooling.
-> **Only the parity test suite — `tests/conftest.py`, `tests/test_health.py`, and `tests/test_api.py`
-> — is deferred to the final milestone** (the `tests/` package itself already exists). The exact
-> application-specific endpoints, models, services, validation schemas, and authentication are then
-> ported **one-to-one** from the original routes once that source is provided. No business endpoints
-> are invented here.
+> **The baseline parity test suite — `tests/conftest.py`, `tests/test_health.py`, and
+> `tests/test_api.py` — is present and passing**, covering the `GET /health` endpoint plus the
+> baseline error-handling and middleware behavior. The exact application-specific endpoints, models,
+> services, validation schemas, and authentication are then ported **one-to-one** from the original
+> routes once that source is provided; a single placeholder parity test is intentionally skipped until
+> then. No business endpoints are invented here.
 
 ## Prerequisites
 
@@ -142,7 +143,6 @@ placeholders with values for your environment.
 | ------------- | ------------------------------ | -------- | --------------------------------------------------------------------------------------------- |
 | `FLASK_APP`   | `wsgi.py`                      | Yes      | Import path of the WSGI module exposing the `app` object; lets the Flask CLI locate the app.  |
 | `APP_CONFIG`  | `development`                  | Yes      | Selects the active config class in `app/config.py`: `development`, `production`, or `testing`. |
-| `FLASK_ENV`   | `development`                  | No       | Environment hint for tooling/code: `development`, `production`, or `testing`.                  |
 | `FLASK_DEBUG` | `1`                            | No       | Toggles the interactive debugger and auto‑reloader. Use `1` in development, `0` in production. |
 | `SECRET_KEY`  | `change-me-in-your-local-env`  | Yes (prod) | Key for session signing, CSRF protection, and other signing. Set a strong random value; never commit a real secret. |
 | `PORT`        | `5000`                         | No       | TCP port the server listens on (used by the production `Procfile` bind; default `5000`).       |
@@ -211,22 +211,30 @@ after the tree.
 > (`app/__init__.py`), the configuration module (`app/config.py`), the `app/api/` Blueprint package
 > (`__init__.py` + `routes.py` with `GET /health`), the WSGI entrypoint (`wsgi.py`), `app/errors.py`,
 > `app/extensions.py`, and `app/middleware.py`, alongside the configuration, dependency, and tooling
-> files at the repository root. The `tests/` package exists; *planned for the final milestone* are
-> its parity modules `tests/conftest.py`, `tests/test_health.py`, and `tests/test_api.py`. Conditional
-> layers — `app/models/`, `app/services/`, `app/schemas/`, `app/auth.py`, `migrations/`,
+> files at the repository root. The `tests/` package and its baseline parity modules
+> (`tests/conftest.py`, `tests/test_health.py`, and `tests/test_api.py`) are **present and passing**.
+> Conditional layers — `app/models/`, `app/services/`, `app/schemas/`, `app/auth.py`, `migrations/`,
 > `app/templates/`, and `app/static/` — are added only if the original source exercises the
 > corresponding capability.
 
 ## Testing
 
-> **Planned — final milestone.** The `tests/` package exists, but its parity modules
-> (`tests/conftest.py`, `tests/test_health.py`, `tests/test_api.py`) are added in the final
-> milestone, so there are no tests to run yet.
+The baseline parity test suite is **present and passing**. It uses
+**[pytest](https://docs.pytest.org/)** (the replacement for the original project's `jest` / `mocha`),
+which is pinned in `requirements-dev.txt`; `pyproject.toml` configures discovery under `tests/`.
 
-The parity test suite will use **[pytest](https://docs.pytest.org/)** (the replacement for the
-original project's `jest` / `mocha`). `pytest` is already pinned in `requirements-dev.txt`, and
-`pyproject.toml` is already configured to discover tests under `tests/`. Once the suite exists,
-install the dev dependencies and run it from the repository root:
+The suite lives in the `tests/` package:
+
+- `tests/conftest.py` — shared fixtures (`app`, `client`) built with the testing configuration.
+- `tests/test_health.py` — `GET /health` coverage: status code, exact JSON body, and JSON content
+  type.
+- `tests/test_api.py` — baseline contract tests: health parity, the centralized JSON `404`/`405`
+  error envelopes, the `X-Request-ID` middleware header (presence and echo), and a regression test
+  asserting the baseline route map exposes no Flask default `/static` route. It also contains a single
+  intentionally **skipped** placeholder for the per-route parity tests (see below).
+
+After installing the dev dependencies (`pip install -r requirements-dev.txt`), run the suite from the
+repository root:
 
 ```bash
 pytest
@@ -238,8 +246,17 @@ or, equivalently:
 python -m pytest
 ```
 
-The tests will assert **parity** with the original behavior — verifying HTTP status codes, response
-headers, and JSON bodies — so that any deviation from the original contract is caught.
+Expected result:
+
+```text
+10 passed, 1 skipped
+```
+
+The active tests assert **parity** for the baseline contract — verifying HTTP status codes, response
+headers, and JSON bodies — so that any deviation from the established behavior is caught. The single
+skipped test is an intentional placeholder: once the original Node.js source is supplied, it is
+replaced with one active test per ported route asserting byte-compatible parity (HTTP method, path,
+status code, response headers, and JSON body).
 
 ## Migration Mapping (Node.js → Python)
 
