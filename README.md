@@ -202,7 +202,7 @@ after the tree.
 ├── .env.example             # Environment variable template (copy to .env)
 ├── .flaskenv                # Flask CLI config (FLASK_APP=wsgi.py, dev flags)
 ├── Procfile                 # Production start command (gunicorn wsgi:app)
-├── pyproject.toml           # Project metadata + pytest/tooling configuration
+├── pyproject.toml           # pytest + lint (ruff) tooling configuration
 ├── .gitignore               # Python ignores (.venv, __pycache__, .env, ...)
 └── README.md                # This file
 ```
@@ -229,9 +229,12 @@ The suite lives in the `tests/` package:
 - `tests/test_health.py` — `GET /health` coverage: status code, exact JSON body, and JSON content
   type.
 - `tests/test_api.py` — baseline contract tests: health parity, the centralized JSON `404`/`405`
-  error envelopes, the `X-Request-ID` middleware header (presence and echo), and a regression test
-  asserting the baseline route map exposes no Flask default `/static` route. It also contains a single
-  intentionally **skipped** placeholder for the per-route parity tests (see below).
+  error envelopes, the `X-Request-ID` middleware header (presence and echo), the request-log-format
+  contract (the contracted log format is installed on `app.logger`, Flask's bracketed default handler
+  is removed, the rendered record shape is asserted, and the handler stays idempotent across repeated
+  `create_app` calls), and a regression test asserting the baseline route map exposes no Flask default
+  `/static` route. It also contains a single intentionally **skipped** placeholder for the per-route
+  parity tests (see below).
 
 After installing the dev dependencies (`pip install -r requirements-dev.txt`), run the suite from the
 repository root:
@@ -249,7 +252,7 @@ python -m pytest
 Expected result:
 
 ```text
-10 passed, 1 skipped
+13 passed, 1 skipped
 ```
 
 The active tests assert **parity** for the baseline contract — verifying HTTP status codes, response
