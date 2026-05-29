@@ -1,10 +1,65 @@
-# Tooling configuration for the Artifact4 Flask server.
-# Scoped to test/lint tooling only (no build-system/packaging metadata) per AAP §0.5.1.
+# pyproject.toml — project metadata + test/lint tooling configuration for Artifact4.
+#
+# Artifact4 is a Python 3 / Flask reimplementation of the original Node.js HTTP
+# server, targeting full functional parity (Agent Action Plan §0.1, §0.5.1).
+#
+# PRIMARY role of this file: centralize pytest configuration so the parity test
+# suite under `tests/` is discovered consistently across local and CI runs. It
+# also declares minimal PEP 621 project metadata and a standard PEP 517/518
+# setuptools build-system so the application package can be built/installed.
+#
+# DEPENDENCY POLICY (AAP §0.3.1) — IMPORTANT: runtime and dev/test dependencies
+# are intentionally NOT declared in this file. They live, EXACT-pinned, in
+# `requirements.txt` (runtime) and `requirements-dev.txt` (dev/test). Keeping a
+# single source of truth for installable packages is why the [project] table
+# below deliberately omits a "dependencies" array.
+#
+# Target runtime: Python 3.12.x. The project supports Python 3.9+ to match Flask
+# (`requires-python = ">=3.9"`); the host toolchain is Python 3.13, which is also
+# fully supported by Flask 3.1.x.
 
+# Standard PEP 517/518 build backend. setuptools packages the importable `app`
+# tree (see [tool.setuptools.packages.find]); declaring it keeps the project
+# build/installable while pytest configuration remains this file's main concern.
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# Minimal PEP 621 project metadata. Deliberately free of a "dependencies" array —
+# see the DEPENDENCY POLICY note above (AAP §0.3.1). `readme` points at the
+# repository README, from which setuptools derives the long description.
+[project]
+name = "artifact4"
+version = "0.1.0"
+description = "Python 3 / Flask reimplementation of the Artifact4 Node.js HTTP server (functional parity)."
+requires-python = ">=3.9"
+readme = "README.md"
+
+# Make package discovery deterministic for the setuptools backend declared above.
+# This repository uses a flat layout in which `app/` is the only importable
+# package; `tests/` and top-level entrypoints (e.g. wsgi.py) are not part of the
+# distribution. Pinning discovery here prevents setuptools' flat-layout
+# auto-discovery from failing with "Multiple top-level packages discovered" once
+# both `app/` and `tests/` exist in the tree.
+[tool.setuptools.packages.find]
+include = ["app*"]
+exclude = ["tests*"]
+
+# PRIMARY purpose of this file: pytest configuration for the parity test suite.
+# `minversion` aligns with the pinned pytest (9.0.3) in requirements-dev.txt.
+# `testpaths` points at the `tests/` directory created by the test-suite agent;
+# the discovery patterns use the conventional test_*.py / Test* / test_* names.
 [tool.pytest.ini_options]
 minversion = "9.0"
 testpaths = ["tests"]
+addopts = "-ra -q"
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-ra -q"
+
+# Optional, lightweight lint configuration (Ruff). Kept intentionally minimal:
+# only the line length and the minimum target Python version are set. Ruff is not
+# a committed dependency, so this block is inert unless `ruff` is explicitly run.
+[tool.ruff]
+line-length = 100
+target-version = "py312"
