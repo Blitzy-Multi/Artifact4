@@ -85,4 +85,18 @@ if __name__ == "__main__":
     # Binding ``0.0.0.0`` exposes the server on all interfaces so it is
     # reachable from outside a container; the port is read from ``PORT`` and
     # defaults to ``5000`` to mirror the documented configuration.
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")))
+    #
+    # ``load_dotenv=False`` is REQUIRED to keep the "does NOT load ``.flaskenv``"
+    # guarantee above actually true. By default ``Flask.run()`` re-runs the Flask
+    # CLI's dotenv loader (``flask.cli.load_dotenv()``), which loads BOTH ``.env``
+    # AND ``.flaskenv``; it then honors ``FLASK_DEBUG`` from that file
+    # (``if "FLASK_DEBUG" in os.environ: self.debug = get_debug_flag()``). Since
+    # ``.flaskenv`` ships ``FLASK_DEBUG=1`` for the ``flask run`` dev workflow,
+    # leaving this at the default would silently flip the interactive debugger ON
+    # here and override the production posture selected above -- contradicting the
+    # fail-safe-to-production contract (AAP rule R6) and exposing the Werkzeug
+    # debugger (remote code execution) on a "production-safe" command. Disabling
+    # it pins ``app.debug`` to the value from the selected config class. The
+    # module-level ``load_dotenv()`` call above still loads ``.env`` (only), so
+    # ``.env``-based configuration continues to work for this path.
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "5000")), load_dotenv=False)
