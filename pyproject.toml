@@ -1,0 +1,44 @@
+# pyproject.toml — test/lint tooling configuration for Artifact4.
+#
+# Artifact4 is a Python 3 / Flask reimplementation of the original Node.js HTTP
+# server, targeting full functional parity (Agent Action Plan §0.1, §0.5.1).
+#
+# ROLE OF THIS FILE: this is a TOOLING-ONLY configuration file. Its purpose is to
+# centralize pytest configuration so the parity test suite under `tests/` is
+# discovered consistently across local and CI runs, plus a minimal lint config.
+#
+# NO BUILD-SYSTEM / NO PROJECT METADATA: the application is run directly as a
+# WSGI app (`gunicorn wsgi:app` / `flask run`) and is never built or installed as
+# a distributable package, so this file intentionally declares neither a
+# [build-system] table nor [project] metadata. Omitting the build-system also
+# keeps the repository free of unpinned/ranged build dependencies (previously
+# `setuptools>=68` / `wheel`), satisfying the exact-pin dependency rule (AAP
+# §0.7, rule R5): the only declared dependencies live, exact-pinned, in the
+# requirements files described below.
+#
+# DEPENDENCY POLICY (AAP §0.3.1) — IMPORTANT: runtime and dev/test dependencies
+# are NOT declared in this file. They live, EXACT-pinned, in `requirements.txt`
+# (runtime) and `requirements-dev.txt` (dev/test), which are the single source of
+# truth for installable packages.
+#
+# Target runtime: Python 3.12.x. The project supports Python 3.9+ to match Flask;
+# the host toolchain is Python 3.13, which is also fully supported by Flask 3.1.x.
+
+# PRIMARY purpose of this file: pytest configuration for the parity test suite.
+# `minversion` aligns with the pinned pytest (9.0.3) in requirements-dev.txt.
+# `testpaths` points at the `tests/` directory; the discovery patterns use the
+# conventional test_*.py / Test* / test_* names.
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+addopts = "-ra -q"
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+# Optional, lightweight lint configuration (Ruff). Kept intentionally minimal:
+# only the line length and the minimum target Python version are set. Ruff is not
+# a committed dependency, so this block is inert unless `ruff` is explicitly run.
+[tool.ruff]
+line-length = 100
+target-version = "py312"
