@@ -184,6 +184,7 @@ exposes a health endpoint:
 | Method | Path      | Description                          | Success Status | Response Body        |
 | ------ | --------- | ------------------------------------ | -------------- | -------------------- |
 | `GET`  | `/health` | Liveness/health check for the server | `200`          | `{"status": "ok"}`   |
+| `GET`  | `/good-evening` | User-requested greeting endpoint | `200`          | `Good evening` (plain text) |
 
 > Application‑specific endpoints (the business routes of the original server) are **ported one‑to‑one**
 > from the original Node.js routes — preserving method, path, status code, headers, and JSON shape —
